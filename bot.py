@@ -57,10 +57,12 @@ def get_ngon_tu():
     for fname in ["ngontagtele.txt", "chui.txt"]:
         if os.path.exists(fname):
             with open(fname, "r", encoding="utf-8") as f:
-                for line in f:
-                    clean = line.strip()
-                    if clean and not clean.startswith("
-    chunk = len(all_lines) // 4
+                            for line in f:
+                clean = line.strip()
+                if clean and not clean.startswith("["):
+                    all_lines.append(clean)
+
+    chunk = len(all_lines) // 4)
     return {
         "sp": all_lines[:chunk],
         "sp2": all_lines[chunk:chunk*2],
