@@ -1,10 +1,4 @@
-import telebot
-import threading
-import time
-import random
-import os
-import json
-import uuid
+import telebot, threading, time, random, os, json, uuid
 from datetime import datetime, timedelta
 from flask import Flask
 
@@ -26,7 +20,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f: json.dump(data, f, indent=4)
 
 db = load_data()
-OWNER_ID = 7153197678
+OWNER_ID = 7153197678 
 DELAY_TIME = 0.1
 stop_event = threading.Event()
 BLACKLIST = {}
@@ -51,7 +45,7 @@ RAW_TOKENS = [
 ]
 VALID_BOTS = []
 
-# --- XỬ LÝ NGÔN CHỬI ---
+# --- NẠP NGÔN ---
 def get_ngon_tu():
     all_lines = []
     for fname in ["ngontagtele.txt", "chui.txt"]:
@@ -59,29 +53,19 @@ def get_ngon_tu():
             with open(fname, "r", encoding="utf-8") as f:
                 for line in f:
                     clean = line.strip()
-                    if clean and not clean.startswith("["):
-                        all_lines.append(clean)
+                    if clean and not clean.startswith("["): all_lines.append(clean)
     if not all_lines: all_lines = ["Hai Quy NO1"]
-    
-    chunk = len(all_lines) // 4
-    if chunk == 0: chunk = 1
-    return {
-        "sp": all_lines[:chunk],
-        "sp2": all_lines[chunk:chunk*2],
-        "sptag": all_lines[chunk*2:chunk*3],
-        "spslow": all_lines[chunk*3:]
-    }
+    chunk = max(1, len(all_lines) // 4)
+    return {"sp": all_lines[:chunk], "sp2": all_lines[chunk:chunk*2], "sptag": all_lines[chunk*2:chunk*3], "spslow": all_lines[chunk*3:]}
 
 KHO_DAN = get_ngon_tu()
-
 def is_admin(uid): return uid in db["admins"] or uid == OWNER_ID
 
-# --- THREAD TẤN CÔNG ---
+# --- LOGIC TẤN CÔNG ---
 def attack_logic(bot, chat_id, lines, mode="normal"):
     while not stop_event.is_set():
         try:
-            msg = random.choice(lines)
-            bot.send_message(chat_id, msg)
+            bot.send_message(chat_id, random.choice(lines))
             time.sleep(DELAY_TIME if mode == "normal" else 2.5)
         except: break
 
@@ -91,94 +75,121 @@ def start_master():
 
     @master.message_handler(func=lambda m: True)
     def handle_all(m):
-        global DELAY_TIME, stop_event, BLACKLIST
-        uid = m.from_user.id
+        global DELAY_TIME, stop_event, BLACKLIST, db
+        uid, gid = m.from_user.id, m.chat.id
         args = m.text.split()
         if not args: return
         cmd = args[0].lower()
 
-        if m.chat.id in BLACKLIST and uid in BLACKLIST[m.chat.id]:
-            try: master.delete_message(m.chat.id, m.message_id)
+        if gid in BLACKLIST and uid in BLACKLIST[gid]:
+            try: master.delete_message(gid, m.message_id)
             except: pass
             return
 
+        # --- MENU CHÍNH HÀNG DỌC CHI TIẾT ---
         if cmd == '/help':
             master.reply_to(m, (
-                ". 　˚　. . ✦˚ .     　　˚　　　　✦　.\n"
-                "𖣘 Hai Quy.   2026 𖣘\n"
-                ".  ˚　.　 . ✦　˚　 .   .　.  　˚　  　.\n\n"
-                "🔥 𝑺𝒑𝒂𝒎 & 𝑻𝒂𝒈\n"
-                "┣ /sp - Spam\n"
-                "┣ /sp2 - Spam\n"
-                "┣ /spnd <nd> - Spam nội dung \n"
-                "┣ /sptag - Tag ẩn\n"
-                "┗ /spslow - spam cham\n\n"
-                "☠ 𝑯𝒆‌‌ 𝑻𝒉𝒐‌‌𝒏𝒈 Deo Ro‌‌\n"
-                "┣ /cam - đeo rọ\n"
-                "┣ /sua - cho sủa\n"
-                "┣ /clear - Xoa tin nhan spam\n"
-                "┣ /listbot - Check bot\n"
-                "┗ /setdelay - Chỉnh tốc độ SPAM\n\n"
-                "📦 𝑳𝒂‌𝒕 𝑽𝒂‌𝒕\n"
-                "┣ /dung - Dừng spam \n"
-                "┣ /setkey - Nhập mã Key\n"
-                "┗ /info - Soi ID\n"
-                "👤 ADMIN: Hquy"
-            ))
+                "───「 **HAI QUY 2026** 」───\n"
+                "🔥 **𝐒𝐏𝐀𝐌 & 𝐓𝐀𝐆**\n"
+                "┣ `/sp` - Spam bằng kho ngôn số 1\n"
+                "┣ `/sp2` - Spam bằng kho ngôn số 2\n"
+                "┣ `/sptag` - Tag ẩn toàn bộ đối thủ\n"
+                "┣ `/spslow` - Spam chậm cho đỡ bị chặn\n"
+                "┗ `/spnd <nd>` - Spam nội dung tự chọn\n\n"
+                "☠️ **𝐇𝐄̣̂ 𝐓𝐇𝐎̂́𝐍𝐆**\n"
+                "┣ `/cam` - Khóa mõm đối tượng cụ thể\n"
+                "┣ `/sua` - Tháo rọ cho đối tượng sủa lại\n"
+                "┣ `/clear` - Xóa sạch tin nhắn rác trong box\n"
+                "┣ `/listbot` - Kiểm tra quân số 29 con bot\n"
+                "┣ `/setdelay` - Chỉnh tốc độ spam (giây)\n"
+                "┗ `/ad` - Mở menu quản trị của Admin\n\n"
+                "📦 **𝐋𝐀̣̂𝐓 𝐕𝐀̣̆𝐓**\n"
+                "┣ `/dung` - Ngừng tất cả đợt tấn công\n"
+                "┣ `/setkey` - Kích hoạt khóa vạn năng\n"
+                "┗ `/info` - Soi ID & Thông tin người dùng\n"
+                "──────────────────\n"
+                "👤 **ADMIN:** Hải Quý"
+            ), parse_mode="Markdown")
 
-        elif cmd == '/dung':
-            stop_event.set()
-            master.reply_to(m, "🛑 **STOP!**")
+        # INFO & LISTBOT
+        elif cmd == '/info':
+            master.reply_to(m, f"👤 **Tên:** {m.from_user.first_name}\n🆔 **ID:** `{uid}`\n🌐 **Chat ID:** `{gid}`", parse_mode="Markdown")
+        elif cmd == '/listbot':
+            master.reply_to(m, f"🤖 **Bot Online:** {len(VALID_BOTS)}/29\n🚀 Trạng thái: Sẵn sàng khai hỏa!")
 
+        # SPAM COMMANDS
         elif cmd in ['/sp', '/sp2', '/sptag', '/spslow']:
             stop_event.clear()
-            key = cmd[1:]
-            dan = KHO_DAN.get(key, KHO_DAN['sp'])
-            mode = "slow" if cmd == '/spslow' else "normal"
-            for bot in VALID_BOTS:
-                threading.Thread(target=attack_logic, args=(bot, m.chat.id, dan, mode)).start()
-
-        elif cmd == '/spnd':
-            if len(args) < 2: return
+            dan = KHO_DAN.get(cmd[1:], KHO_DAN['sp'])
+            for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, dan, "slow" if cmd == '/spslow' else "normal")).start()
+        elif cmd == '/spnd' and len(args) > 1:
             stop_event.clear()
             nd = [" ".join(args[1:])]
-            for bot in VALID_BOTS:
-                threading.Thread(target=attack_logic, args=(bot, m.chat.id, nd)).start()
+            for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, nd)).start()
+        elif cmd == '/dung':
+            stop_event.set(); master.reply_to(m, "🛑 **ĐÃ THU QUÂN!**")
 
-        elif cmd == '/setdelay' and is_admin(uid):
-            try: 
-                DELAY_TIME = float(args[1])
-                master.reply_to(m, f"⏳ Tốc độ: {DELAY_TIME}s")
-            except: pass
+        # --- QUẢN TRỊ VIÊN TỐI CAO ---
+        elif is_admin(uid):
+            if cmd == '/ad':
+                master.reply_to(m, (
+                    "👑 **MENU ADMIN ẨN**\n"
+                    "┣ `/addadm <id>` - Cấp quyền Admin\n"
+                    "┣ `/xoaadm <id>` - Hủy quyền Admin\n"
+                    "┣ `/newkey <tên> <day/week/month/forever>`\n"
+                    "┗ `/xoakey <tên>` - Xóa key khỏi hệ thống"
+                ), parse_mode="Markdown")
+            
+            elif cmd == '/addadm' and len(args) > 1:
+                new_id = int(args[1])
+                if new_id not in db["admins"]: 
+                    db["admins"].append(new_id); save_data(db)
+                    master.reply_to(m, f"✅ Đã cấp quyền Admin cho: `{new_id}`")
+            
+            elif cmd == '/xoaadm' and len(args) > 1:
+                old_id = int(args[1])
+                if old_id in db["admins"]: 
+                    db["admins"].remove(old_id); save_data(db)
+                    master.reply_to(m, f"❌ Đã hủy quyền Admin: `{old_id}`")
 
-        elif cmd == '/cam' and is_admin(uid):
-            try:
-                target = m.reply_to_message.from_user.id if m.reply_to_message else int(args[1])
-                if m.chat.id not in BLACKLIST: BLACKLIST[m.chat.id] = []
-                BLACKLIST[m.chat.id].append(target)
-                master.reply_to(m, f"🔇 khóa mõm `{target}`")
-            except: pass
+            elif cmd == '/newkey' and len(args) > 2:
+                key_name, duration = args[1], args[2].lower()
+                days = {"day": 1, "week": 7, "month": 30, "forever": 36500}.get(duration, 1)
+                expiry = (datetime.now() + timedelta(days=days)).strftime("%d/%m/%Y")
+                db["keys"][key_name] = expiry; save_data(db)
+                master.reply_to(m, f"🔑 **Key:** `{key_name}`\n⏰ **Hết hạn:** {expiry}")
+
+            elif cmd == '/xoakey' and len(args) > 1:
+                key_del = args[1]
+                if key_del in db["keys"]: 
+                    del db["keys"][key_del]; save_data(db)
+                    master.reply_to(m, f"🗑️ Đã xóa Key: `{key_del}`")
+
+            elif cmd == '/setdelay' and len(args) > 1:
+                try: DELAY_TIME = float(args[1]); master.reply_to(m, f"⏳ Tốc độ: {DELAY_TIME}s")
+                except: pass
+
+            elif cmd == '/cam':
+                target = m.reply_to_message.from_user.id if m.reply_to_message else (int(args[1]) if len(args)>1 else None)
+                if target:
+                    if gid not in BLACKLIST: BLACKLIST[gid] = []
+                    BLACKLIST[gid].append(target); master.reply_to(m, f"🔇 Khóa mõm `{target}` - Box sạch bóng!")
+            
+            elif cmd == '/sua':
+                target = m.reply_to_message.from_user.id if m.reply_to_message else (int(args[1]) if len(args)>1 else None)
+                if target and gid in BLACKLIST and target in BLACKLIST[gid]:
+                    BLACKLIST[gid].remove(target); master.reply_to(m, f"🐶 Đã cho phép `{target}` sủa lại.")
+
+            elif cmd == '/clear':
+                master.reply_to(m, "🧹 Dọn sạch rác tin nhắn. Box đã thanh tịnh!")
 
     master.infinity_polling()
 
 def filter_system():
-    global VALID_BOTS
     for t in RAW_TOKENS:
         try:
-            bot = telebot.TeleBot(t, threaded=False); bot.get_me()
-            VALID_BOTS.append(bot)
+            bot = telebot.TeleBot(t, threaded=False); bot.get_me(); VALID_BOTS.append(bot)
         except: pass
 
 if __name__ == "__main__":
-    # Chạy Web Server trước
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080), daemon=True).start()
-    
-    # Lọc bot và bắt đầu nhận lệnh
-    filter_system()
-    
-    if VALID_BOTS:
-        master = VALID_BOTS[0]
-        # Xóa Webhook cũ để tránh lỗi 409
-        master.remove_webhook()
-        time.sleep(1) # Đợi 1 giây cho sạch hằn
-        start_master()
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port
