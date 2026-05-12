@@ -5,7 +5,7 @@ from flask import Flask
 # --- HỆ THỐNG DUY TRÌ ---
 app = Flask(__name__)
 @app.route('/')
-def home(): return "SYSTEM ONLINE"
+def home(): return "HQUY DZ ONLINE"
 
 # --- DATABASE ---
 DATA_FILE = "bot_data.json"
