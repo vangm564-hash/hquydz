@@ -51,18 +51,20 @@ RAW_TOKENS = [
 ]
 VALID_BOTS = []
 
-# --- XỬ LÝ NGÔN CHỬI (CHIA ĐỀU MỖI CÂU 1 DÒNG) ---
+# --- XỬ LÝ NGÔN CHỬI ---
 def get_ngon_tu():
     all_lines = []
     for fname in ["ngontagtele.txt", "chui.txt"]:
         if os.path.exists(fname):
             with open(fname, "r", encoding="utf-8") as f:
-                            for line in f:
-                clean = line.strip()
-                if clean and not clean.startswith("["):
-                    all_lines.append(clean)
-
-    chunk = len(all_lines) // 4)
+                for line in f:
+                    clean = line.strip()
+                    if clean and not clean.startswith("["):
+                        all_lines.append(clean)
+    if not all_lines: all_lines = ["Hai Quy NO1"]
+    
+    chunk = len(all_lines) // 4
+    if chunk == 0: chunk = 1
     return {
         "sp": all_lines[:chunk],
         "sp2": all_lines[chunk:chunk*2],
@@ -77,8 +79,8 @@ def is_admin(uid): return uid in db["admins"] or uid == OWNER_ID
 # --- THREAD TẤN CÔNG ---
 def attack_logic(bot, chat_id, lines, mode="normal"):
     while not stop_event.is_set():
-        msg = random.choice(lines)
         try:
+            msg = random.choice(lines)
             bot.send_message(chat_id, msg)
             time.sleep(DELAY_TIME if mode == "normal" else 2.5)
         except: break
@@ -95,13 +97,11 @@ def start_master():
         if not args: return
         cmd = args[0].lower()
 
-        # Tự xóa tin nhắn (Câm mõm)
         if m.chat.id in BLACKLIST and uid in BLACKLIST[m.chat.id]:
             try: master.delete_message(m.chat.id, m.message_id)
             except: pass
             return
 
-        # MENU CHÍNH
         if cmd == '/help':
             master.reply_to(m, (
                 ". 　˚　. . ✦˚ .     　　˚　　　　✦　.\n"
@@ -126,13 +126,11 @@ def start_master():
                 "👤 ADMIN: Hquy"
             ))
 
-        # LỆNH /DUNG (DỪNG TẤT CẢ)
         elif cmd == '/dung':
             stop_event.set()
             master.reply_to(m, "🛑 **STOP!**")
 
-        # LOGIC SPAM
-        if cmd in ['/sp', '/sp2', '/sptag', '/spslow']:
+        elif cmd in ['/sp', '/sp2', '/sptag', '/spslow']:
             stop_event.clear()
             key = cmd[1:]
             dan = KHO_DAN.get(key, KHO_DAN['sp'])
@@ -147,12 +145,10 @@ def start_master():
             for bot in VALID_BOTS:
                 threading.Thread(target=attack_logic, args=(bot, m.chat.id, nd)).start()
 
-        # QUẢN TRỊ (ẨN)
-        elif cmd == '/ad' and is_admin(uid):
-            master.reply_to(m, "👑 Quản trị: /addadm, /xoaadm, /getkey, /xoakey")
-
         elif cmd == '/setdelay' and is_admin(uid):
-            try: DELAY_TIME = float(args[1]); master.reply_to(m, f"⏳ Tốc độ: {DELAY_TIME}s")
+            try: 
+                DELAY_TIME = float(args[1])
+                master.reply_to(m, f"⏳ Tốc độ: {DELAY_TIME}s")
             except: pass
 
         elif cmd == '/cam' and is_admin(uid):
