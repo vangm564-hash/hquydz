@@ -14,7 +14,7 @@ def load_data():
         try:
             with open(DATA_FILE, "r") as f: return json.load(f)
         except: pass
-    return {"admins": [7153197678], "keys": {}, "authorized_groups": {}}
+    return {"admins": [7153197678], "keys": {}, "authorized_groups": {}, "users_with_key": {}}
 
 def save_data(data):
     with open(DATA_FILE, "w") as f: json.dump(data, f, indent=4)
@@ -45,7 +45,20 @@ RAW_TOKENS = [
 ]
 VALID_BOTS = []
 
-# --- NẠP NGÔN ---
+# --- LOGIC PHÂN QUYỀN ---
+def is_admin(uid): return uid in db["admins"] or uid == OWNER_ID
+
+def has_valid_key(uid):
+    if is_admin(uid): return True
+    uid_str = str(uid)
+    if uid_str in db["users_with_key"]:
+        try:
+            expiry = datetime.strptime(db["users_with_key"][uid_str], "%Y-%m-%d")
+            if expiry > datetime.now(): return True
+        except: pass
+    return False
+
+# --- KHO NGÔN NGỮ ---
 def get_ngon_tu():
     all_lines = []
     for fname in ["ngontagtele.txt", "chui.txt"]:
@@ -59,9 +72,7 @@ def get_ngon_tu():
     return {"sp": all_lines[:chunk], "sp2": all_lines[chunk:chunk*2], "sptag": all_lines[chunk*2:chunk*3], "spslow": all_lines[chunk*3:]}
 
 KHO_DAN = get_ngon_tu()
-def is_admin(uid): return uid in db["admins"] or uid == OWNER_ID
 
-# --- LOGIC TẤN CÔNG ---
 def attack_logic(bot, chat_id, lines, mode="normal"):
     while not stop_event.is_set():
         try:
@@ -81,36 +92,37 @@ def start_master():
         if not args: return
         cmd = args[0].lower()
 
+        # BLACKLIST CHECK
         if gid in BLACKLIST and uid in BLACKLIST[gid]:
             try: master.delete_message(gid, m.message_id)
             except: pass
             return
 
-        # --- MENU CHO NGƯỜI KHÁC THẤY (HÀNG DỌC) ---
+        # 1. MENU HELP - HÀNG DỌC (PUBLIC)
         if cmd == '/help':
             master.reply_to(m, (
                 "───「 **HAI QUY 2026** 」───\n"
                 "🔥 **𝐒𝐏𝐀𝐌 & 𝐓𝐀𝐆**\n"
-                "┣ `/sp` - Spam ngôn \n"
-                "┣ `/sp2` - Spam ngôn \n"
-                "┣ `/sptag` - Tag ẩn đối thủ\n"
+                "┣ `/sp` - Spam ngôn 1\n"
+                "┣ `/sp2` - Spam ngôn 2\n"
+                "┣ `/sptag` - Tag ẩn \n"
                 "┣ `/spslow` - Spam chậm\n"
                 "┗ `/spnd` - Spam nội dung\n\n"
                 "☠️ **𝐐𝐔𝐀̉𝐍 𝐋𝐘́ 𝐂𝐇𝐀𝐓**\n"
                 "┣ `/cam` - Khóa mõm\n"
                 "┣ `/sua` - Tháo rọ mõm\n"
-                "┣ `/clear` -XOA TIN NHAN\n"
+                "┣ `/clear` - XOA TIN NHAN\n"
                 "┗ `/setdelay` - Chỉnh tốc độ\n\n"
                 "📦 **𝐓𝐈𝐄̣̂𝐍 𝐈́𝐂𝐇**\n"
                 "┣ `/dung` - STOP\n"
-                "┣ `/listbot` - Check BOT\n"
-                "┣ `/setkey` - NHAP KEY\n"
+                "┣ `/listbot` - CHECKn"
+                "┣ `/setkey` - Kích hoạt Key\n"
                 "┗ `/info` - Check thông tin\n"
                 "──────────────────\n"
                 "👤 **OWNER:** Hải Quý"
             ), parse_mode="Markdown")
 
-        # --- MENU CHỈ ADMIN THẤY ---
+        # 2. MENU ADMIN - HÀNG DỌC (PRIVATE)
         elif cmd == '/ad':
             if is_admin(uid):
                 master.reply_to(m, (
@@ -118,51 +130,60 @@ def start_master():
                     "👑 **𝐐𝐔𝐘𝐄̂̀𝐍 𝐓𝐎̂́𝐈 𝐂𝐀𝐎**\n"
                     "┣ `/addadm <id>` - Thêm Admin\n"
                     "┣ `/xoaadm <id>` - Xóa Admin\n"
-                    "┣ `/newkey <tên> <day/week/month/forever>`\n"
+                    "┣ `/newkey <tên> <day/week/forever>`\n"
                     "┗ `/xoakey <tên>` - Xóa Key bot\n"
                     "──────────────────"
                 ), parse_mode="Markdown")
             else:
-                master.reply_to(m, "⚠️ **Cảnh báo:** Bạn không có quyền sử dụng lệnh này!")
+                master.reply_to(m, "🚫 Cút!")
 
+        # INFO & LISTBOT
         elif cmd == '/info':
-            master.reply_to(m, f"👤 **Tên:** {m.from_user.first_name}\n🆔 **ID:** `{uid}`\n🌐 **Chat ID:** `{gid}`", parse_mode="Markdown")
+            master.reply_to(m, f"👤 **User:** {m.from_user.first_name}\n🆔 **ID:** `{uid}`\n🌐 **Chat ID:** `{gid}`", parse_mode="Markdown")
         elif cmd == '/listbot':
             master.reply_to(m, f"🤖 **Bot Online:** {len(VALID_BOTS)}/29")
-        elif cmd in ['/sp', '/sp2', '/sptag', '/spslow']:
+
+        # LOGIC KÍCH HOẠT KEY
+        elif cmd == '/setkey' and len(args) > 1:
+            key_name = args[1]
+            if key_name in db["keys"]:
+                expiry = db["keys"][key_name]
+                db["users_with_key"][str(uid)] = expiry
+                del db["keys"][key_name] # Key dùng 1 lần
+                save_data(db)
+                master.reply_to(m, f"✅ **Kích hoạt thành công!**\n⏰ Hết hạn: {expiry}")
+            else:
+                master.reply_to(m, "❌ Key không tồn tại hoặc đã hết hạn!")
+
+        # LOGIC TẤN CÔNG (PHẢI CÓ KEY MỚI DÙNG ĐƯỢC)
+        elif cmd in ['/sp', '/sp2', '/sptag', '/spslow', '/spnd']:
+            if not has_valid_key(uid):
+                master.reply_to(m, "⚠️ **KHÔNG CÓ QUYỀN:** Vui lòng gõ `/setkey <key>` để sử dụng bot!")
+                return
+            
             stop_event.clear()
-            dan = KHO_DAN.get(cmd[1:], KHO_DAN['sp'])
-            for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, dan, "slow" if cmd == '/spslow' else "normal")).start()
-        elif cmd == '/spnd' and len(args) > 1:
-            stop_event.clear()
-            nd = [" ".join(args[1:])]
-            for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, nd)).start()
+            if cmd == '/spnd' and len(args) > 1:
+                nd = [" ".join(args[1:])]
+                for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, nd)).start()
+            else:
+                dan = KHO_DAN.get(cmd[1:], KHO_DAN['sp'])
+                for b in VALID_BOTS: threading.Thread(target=attack_logic, args=(b, gid, dan, "slow" if cmd == '/spslow' else "normal")).start()
+
         elif cmd == '/dung':
             stop_event.set(); master.reply_to(m, "🛑 **STOP!**")
 
-        # LOGIC XỬ LÝ LỆNH ẨN
+        # LOGIC XỬ LÝ CHO ADMIN
         elif is_admin(uid):
             if cmd == '/addadm' and len(args) > 1:
                 new_id = int(args[1])
-                if new_id not in db["admins"]: 
-                    db["admins"].append(new_id); save_data(db)
-                    master.reply_to(m, f"✅ Đã thêm Admin: `{new_id}`")
-            elif cmd == '/xoaadm' and len(args) > 1:
-                old_id = int(args[1])
-                if old_id in db["admins"]: 
-                    db["admins"].remove(old_id); save_data(db)
-                    master.reply_to(m, f"❌ Đã xóa Admin: `{old_id}`")
+                if new_id not in db["admins"]: db["admins"].append(new_id); save_data(db)
+                master.reply_to(m, "✅ Thêm Admin thành công!")
             elif cmd == '/newkey' and len(args) > 2:
-                key_name, duration = args[1], args[2].lower()
+                k_name, duration = args[1], args[2].lower()
                 days = {"day": 1, "week": 7, "month": 30, "forever": 36500}.get(duration, 1)
                 expiry = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-                db["keys"][key_name] = expiry; save_data(db)
-                master.reply_to(m, f"🔑 **Key:** `{key_name}` | ⏰ **Hết hạn:** {expiry}")
-            elif cmd == '/xoakey' and len(args) > 1:
-                key_del = args[1]
-                if key_del in db["keys"]: 
-                    del db["keys"][key_del]; save_data(db)
-                    master.reply_to(m, f"🗑️ Đã xóa Key: `{key_del}`")
+                db["keys"][k_name] = expiry; save_data(db)
+                master.reply_to(m, f"🔑 **Key:** `{k_name}`\n⏰ **Hạn:** {expiry}")
             elif cmd == '/setdelay' and len(args) > 1:
                 try: DELAY_TIME = float(args[1]); master.reply_to(m, f"⏳ Tốc độ: {DELAY_TIME}s")
                 except: pass
@@ -170,13 +191,9 @@ def start_master():
                 target = m.reply_to_message.from_user.id if m.reply_to_message else (int(args[1]) if len(args)>1 else None)
                 if target:
                     if gid not in BLACKLIST: BLACKLIST[gid] = []
-                    BLACKLIST[gid].append(target); master.reply_to(m, f"🔇 Khóa mõm `{target}`")
-            elif cmd == '/sua':
-                target = m.reply_to_message.from_user.id if m.reply_to_message else (int(args[1]) if len(args)>1 else None)
-                if target and gid in BLACKLIST and target in BLACKLIST[gid]:
-                    BLACKLIST[gid].remove(target); master.reply_to(m, f"🐶 Tháo rọ `{target}`")
+                    BLACKLIST[gid].append(target); master.reply_to(m, "🔇 Đã khóa mõm!")
             elif cmd == '/clear':
-                master.reply_to(m, "🧹 Dọn rác thành công!")
+                master.reply_to(m, "🧹 DONE XOA!")
 
     master.infinity_polling()
 
@@ -189,3 +206,4 @@ def filter_system():
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080), daemon=True).start()
     filter_system(); start_master()
+
