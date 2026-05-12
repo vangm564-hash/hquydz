@@ -170,5 +170,15 @@ def filter_system():
         except: pass
 
 if __name__ == "__main__":
+    # Chạy Web Server trước
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080), daemon=True).start()
-    filter_system(); start_master()
+    
+    # Lọc bot và bắt đầu nhận lệnh
+    filter_system()
+    
+    if VALID_BOTS:
+        master = VALID_BOTS[0]
+        # Xóa Webhook cũ để tránh lỗi 409
+        master.remove_webhook()
+        time.sleep(1) # Đợi 1 giây cho sạch hằn
+        start_master()
